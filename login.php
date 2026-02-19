@@ -1,55 +1,82 @@
 <?php
 session_start();
-$conn = new mysqli("localhost","root","","school_portal");
+require_once "config.php";
 
-if($conn->connect_error){
-    die("Connection failed: " . $conn->connect_error);
-}
+if($_SERVER['REQUEST_METHOD'] == 'POST') {
 
-if(isset($_POST['login'])){
-    $username = $_POST['username'];
-    $password = $_POST['password'];
+    $username   = trim($_POST['username']);
+    $password   = trim($_POST['password']);
+    $secret_key = trim($_POST['secret_key']); // Secret key field
 
+    // -------------------------
+    // SECRET KEY CHECK
+    // -------------------------
+    $allowed_key = "schoolportal1234"; // Replace with your secret key or use config.php
+    if($secret_key !== $allowed_key){
+        die("<div style='color:red'>Access denied: invalid secret key.</div>");
+    }
+
+    // -------------------------
+    // LOGIN CHECK
+    // -------------------------
     $stmt = $conn->prepare("SELECT id, name, role, password FROM users WHERE username=?");
     $stmt->bind_param("s", $username);
     $stmt->execute();
-    $stmt->store_result();
-    
-    if($stmt->num_rows > 0){
-        $stmt->bind_result($id, $name, $role, $hashed_password);
-        $stmt->fetch();
-        if(password_verify($password, $hashed_password)){
-            $_SESSION['user_id'] = $id;
-            $_SESSION['name'] = $name;
-            $_SESSION['role'] = $role;
+    $stmt->bind_result($user_id, $name, $role, $hashed_password);
+    $stmt->fetch();
+    $stmt->close();
 
-            // Redirect based on role
-            if($role == 'admin') header("Location: admin_dashboard.php");
-            elseif($role == 'teacher') header("Location: teacher_dashboard.php");
-            else header("Location: student_dashboard.php");
-            exit();
+    // Verify password using password_verify for bcrypt
+    if($user_id && password_verify($password, $hashed_password)) {
+        // Set session
+        $_SESSION['user_id'] = $user_id;
+        $_SESSION['role'] = $role;
+        $_SESSION['name'] = $name; // <-- store user name
+
+        // Redirect by role
+        if($role == 'student') {
+            header("Location: student_dashboard.php");
+        } elseif($role == 'teacher') {
+            header("Location: teacher_dashboard.php");
+        } elseif($role == 'admin') {
+            header("Location: admin_dashboard.php");
         } else {
-            $error = "Password is incorrect";
+            header("Location: dashboard.php");
         }
+        exit();
     } else {
-        $error = "Username not found";
+        echo "<div style='color:red'>Invalid username or password</div>";
     }
 }
 ?>
+
+<!-- -------------------------
+     LOGIN FORM HTML
+------------------------- -->
 <!DOCTYPE html>
 <html>
 <head>
-    <title>School Portal Login</title>
+    <title>Login - School Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-<body>
-    <h2>Login</h2>
-    <?php if(isset($error)) echo "<p style='color:red;'>$error</p>"; ?>
-    <form method="post" action="">
-        <label>Username:</label><br>
-        <input type="text" name="username" required><br>
-        <label>Password:</label><br>
-        <input type="password" name="password" required><br><br>
-        <input type="submit" name="login" value="Login">
+<body class="bg-light">
+<div class="container mt-5" style="max-width: 500px;">
+    <h2 class="mb-4">Login to School Portal</h2>
+    <form method="POST">
+        <div class="mb-3">
+            <label>Username</label>
+            <input type="text" name="username" class="form-control" required>
+        </div>
+        <div class="mb-3">
+            <label>Password</label>
+            <input type="password" name="password" class="form-control" required>
+        </div>
+        <div class="mb-3">
+            <label>Secret Key</label>
+            <input type="text" name="secret_key" class="form-control" placeholder="Enter secret key" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Login</button>
     </form>
+</div>
 </body>
 </html>
