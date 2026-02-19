@@ -2,68 +2,87 @@
 session_start();
 require_once "config.php";
 
-// Only logged-in users can download
-if(!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['student', 'teacher'])){
-    die("Access denied. Please login first.");
+// Must be logged in
+if (!isset($_SESSION['user_id'])) {
+    die("Access denied.");
 }
 
-$user_id = $_SESSION['user_id'];
-$user_role = $_SESSION['role'];
-
-if(!isset($_GET['id'])){
+if (!isset($_GET['id'])) {
     die("Invalid request.");
 }
 
 $file_id = intval($_GET['id']);
+$user_id = $_SESSION['user_id'];
+$user_role = $_SESSION['role'];
 
-// Get student class if needed
-$user_class = null;
-if($user_role == 'student'){
-    $stmt = $conn->prepare("SELECT class FROM users WHERE id=?");
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $stmt->bind_result($user_class);
-    $stmt->fetch();
-    $stmt->close();
-}
-
-// Fetch file info
-if($user_role == 'student'){
-    $stmt = $conn->prepare("SELECT file_path, title FROM uploads WHERE id=? AND class=?");
-    $stmt->bind_param("is", $file_id, $user_class);
-} else { // teacher
-    $stmt = $conn->prepare("SELECT file_path, title FROM uploads WHERE id=?");
-    $stmt->bind_param("i", $file_id);
-}
-
+// Get file info
+$stmt = $conn->prepare("
+    SELECT uploads.file_path, uploads.class, uploads.uploaded_by
+    FROM uploads
+    WHERE uploads.id = ?
+");
+$stmt->bind_param("i", $file_id);
 $stmt->execute();
 $result = $stmt->get_result();
 $file = $result->fetch_assoc();
 $stmt->close();
 
-if(!$file){
-    die("File not found or access denied.");
+if (!$file) {
+    die("File not found.");
 }
 
-// Secure file path
-$uploadsDir = "C:\\xampp\\secure_uploads\\";  // change to your folder
-$filePath = realpath($uploadsDir . $file['file_path']);
+$filePath = realpath("C:/xampp/secure_uploads/" . $file['file_path']);
 
-if(!$filePath || strpos($filePath, $uploadsDir) !== 0 || !file_exists($filePath)){
-    die("Invalid file or missing.");
+// Security check: file exists
+if (!$filePath || !file_exists($filePath)) {
+    die("File missing.");
 }
 
-// Force download
-$finfo = finfo_open(FILEINFO_MIME_TYPE);
-$mimeType = finfo_file($finfo, $filePath);
-finfo_close($finfo);
+// ===============================
+// ROLE-BASED ACCESS CONTROL
+// ===============================
+
+// ADMIN → can download anything
+if ($user_role === 'admin') {
+    // allowed
+}
+
+// TEACHER → can only download their own uploads
+elseif ($user_role === 'teacher') {
+    if ($file['uploaded_by'] != $user_id) {
+        die("Access denied.");
+    }
+}
+
+// STUDENT → can only download files for their class
+elseif ($user_role === 'student') {
+
+    $stmt = $conn->prepare("SELECT class FROM users WHERE id = ?");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $stmt->bind_result($student_class);
+    $stmt->fetch();
+    $stmt->close();
+
+    if ($student_class !== $file['class']) {
+        die("Access denied.");
+    }
+}
+else {
+    die("Access denied.");
+}
+
+// ===============================
+// FORCE DOWNLOAD
+// ===============================
+
+$filename = basename($filePath);
 
 header("Content-Description: File Transfer");
-header("Content-Type: $mimeType");
-header("Content-Disposition: attachment; filename=\"" . basename($file['file_path']) . "\"");
+header("Content-Type: application/octet-stream");
+header("Content-Disposition: attachment; filename=\"$filename\"");
 header("Content-Length: " . filesize($filePath));
-header("Cache-Control: no-cache, must-revalidate");
-header("Pragma: public");
-
+header("Cache-Control: no-cache");
 readfile($filePath);
 exit();
+?>
