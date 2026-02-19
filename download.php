@@ -15,12 +15,8 @@ $file_id = intval($_GET['id']);
 $user_id = $_SESSION['user_id'];
 $user_role = $_SESSION['role'];
 
-// Get file info
-$stmt = $conn->prepare("
-    SELECT uploads.file_path, uploads.class, uploads.uploaded_by
-    FROM uploads
-    WHERE uploads.id = ?
-");
+// Fetch file info
+$stmt = $conn->prepare("SELECT id, title, type, file_path, uploaded_by, class FROM uploads WHERE id = ?");
 $stmt->bind_param("i", $file_id);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -31,35 +27,22 @@ if (!$file) {
     die("File not found.");
 }
 
-/* ================================
-   UPDATED FOR ONLINE HOSTING
-================================ */
+// Path for InfinityFree
 $filePath = realpath(__DIR__ . "/private_uploads/" . $file['file_path']);
 
-// Security check: file exists
+// File exists check
 if (!$filePath || !file_exists($filePath)) {
     die("File missing.");
 }
 
-/* ================================
-   ROLE-BASED ACCESS CONTROL
-================================ */
-
-// ADMIN → can download anything
+// ROLE-BASED ACCESS CONTROL
 if ($user_role === 'admin') {
     // allowed
-}
-
-// TEACHER → only own uploads
-elseif ($user_role === 'teacher') {
+} elseif ($user_role === 'teacher') {
     if ($file['uploaded_by'] != $user_id) {
         die("Access denied.");
     }
-}
-
-// STUDENT → only their class
-elseif ($user_role === 'student') {
-
+} elseif ($user_role === 'student') {
     $stmt = $conn->prepare("SELECT class FROM users WHERE id = ?");
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
@@ -70,17 +53,12 @@ elseif ($user_role === 'student') {
     if ($student_class !== $file['class']) {
         die("Access denied.");
     }
-}
-else {
+} else {
     die("Access denied.");
 }
 
-/* ================================
-   FORCE DOWNLOAD
-================================ */
-
+// FORCE DOWNLOAD
 $filename = basename($filePath);
-
 header("Content-Description: File Transfer");
 header("Content-Type: application/octet-stream");
 header("Content-Disposition: attachment; filename=\"$filename\"");
