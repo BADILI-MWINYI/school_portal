@@ -31,30 +31,33 @@ if (!$file) {
     die("File not found.");
 }
 
-$filePath = realpath("C:/xampp/secure_uploads/" . $file['file_path']);
+/* ================================
+   UPDATED FOR ONLINE HOSTING
+================================ */
+$filePath = realpath(__DIR__ . "/private_uploads/" . $file['file_path']);
 
 // Security check: file exists
 if (!$filePath || !file_exists($filePath)) {
     die("File missing.");
 }
 
-// ===============================
-// ROLE-BASED ACCESS CONTROL
-// ===============================
+/* ================================
+   ROLE-BASED ACCESS CONTROL
+================================ */
 
 // ADMIN → can download anything
 if ($user_role === 'admin') {
     // allowed
 }
 
-// TEACHER → can only download their own uploads
+// TEACHER → only own uploads
 elseif ($user_role === 'teacher') {
     if ($file['uploaded_by'] != $user_id) {
         die("Access denied.");
     }
 }
 
-// STUDENT → can only download files for their class
+// STUDENT → only their class
 elseif ($user_role === 'student') {
 
     $stmt = $conn->prepare("SELECT class FROM users WHERE id = ?");
@@ -72,9 +75,9 @@ else {
     die("Access denied.");
 }
 
-// ===============================
-// FORCE DOWNLOAD
-// ===============================
+/* ================================
+   FORCE DOWNLOAD
+================================ */
 
 $filename = basename($filePath);
 
@@ -83,6 +86,7 @@ header("Content-Type: application/octet-stream");
 header("Content-Disposition: attachment; filename=\"$filename\"");
 header("Content-Length: " . filesize($filePath));
 header("Cache-Control: no-cache");
+
 readfile($filePath);
 exit();
 ?>
