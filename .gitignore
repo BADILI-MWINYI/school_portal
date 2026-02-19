@@ -1,0 +1,11 @@
+# Exclude uploaded files
+secure_uploads/
+uploads/
+
+# Exclude sensitive configuration
+config.php
+.env
+
+# OS/IDE files
+*.DS_Store
+*.log
